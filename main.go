@@ -6,7 +6,10 @@ import (
 	"log"
 	"net/http"
 	"sync"
+	"sync/atomic"
 	"time"
+
+	"industrial-telemetry-engine/pkg/compressor"
 )
 
 type SensorPayload struct {
@@ -16,20 +19,52 @@ type SensorPayload struct {
 	Timestamp time.Time `json:"timestamp"`
 }
 
+type StatsResponse struct {
+	Status             string  `json:"status"`
+	TotalIngested      int64   `json:"total_ingested"`
+	CriticalAlerts     int64   `json:"critical_alerts"`
+	QueueDepth         int     `json:"queue_depth"`
+	RawBits            int64   `json:"raw_bits"`
+	CompressedBits     int64   `json:"compressed_bits"`
+	CompressionRatio   float64 `json:"compression_ratio"`
+}
+
 var (
-	dataChannel = make(chan SensorPayload, 10000)
-	alertCount  int64
-	mu          sync.Mutex
+	dataChannel        = make(chan SensorPayload, 10000)
+	totalIngestedCount int64
+	alertCount         int64
+	rawBitsCount       int64
+	compressedBitsCount int64
+
+	compressorMap   = make(map[string]*compressor.GorillaCompressor)
+	compressorMutex sync.Mutex
 )
+
+func getOrCreateCompressor(sensorID string) *compressor.GorillaCompressor {
+	compressorMutex.Lock()
+	defer compressorMutex.Unlock()
+	c, exists := compressorMap[sensorID]
+	if !exists {
+		c = compressor.NewGorillaCompressor()
+		compressorMap[sensorID] = c
+	}
+	return c
+}
 
 func telemetryWorker(id int) {
 	for payload := range dataChannel {
+		// 1. Check critical threshold
 		if payload.Type == "Temperature" && payload.Value > 85.0 {
-			mu.Lock()
-			alertCount++
-			mu.Unlock()
+			atomic.AddInt64(&alertCount, 1)
 			fmt.Printf("[ALERT Worker %d] Critical Temp on %s: %.2f C\n", id, payload.SensorID, payload.Value)
 		}
+
+		// 2. Stream through Gorilla Time-Series Compressor
+		c := getOrCreateCompressor(payload.SensorID)
+		bits, _ := c.CompressPair(payload.Timestamp.UnixMilli(), payload.Value)
+
+		atomic.AddInt64(&rawBitsCount, 128)
+		atomic.AddInt64(&compressedBitsCount, int64(bits))
 	}
 }
 
@@ -38,24 +73,52 @@ func ingestHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Method Not Allowed", http.StatusMethodNotAllowed)
 		return
 	}
+
 	var payload SensorPayload
 	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		http.Error(w, "Invalid JSON payload: "+err.Error(), http.StatusBadRequest)
 		return
 	}
-	payload.Timestamp = time.Now()
-	dataChannel <- payload
-	w.WriteHeader(http.StatusAccepted)
-	w.Write([]byte(`{"status":"queued"}`))
+
+	if payload.Timestamp.IsZero() {
+		payload.Timestamp = time.Now()
+	}
+
+	// Non-blocking channel push with backpressure
+	select {
+	case dataChannel <- payload:
+		atomic.AddInt64(&totalIngestedCount, 1)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusAccepted)
+		w.Write([]byte(`{"status":"queued"}`))
+	default:
+		// Queue full - return backpressure 429
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusTooManyRequests)
+		w.Write([]byte(`{"error":"queue_full", "status":"rejected"}`))
+	}
 }
 
 func statsHandler(w http.ResponseWriter, r *http.Request) {
-	mu.Lock()
-	count := alertCount
-	mu.Unlock()
-	response := fmt.Sprintf(`{"status":"online", "critical_alerts":%d, "queue_depth":%d}`, count, len(dataChannel))
+	raw := atomic.LoadInt64(&rawBitsCount)
+	comp := atomic.LoadInt64(&compressedBitsCount)
+	var ratio float64
+	if comp > 0 {
+		ratio = float64(raw) / float64(comp)
+	}
+
+	resp := StatsResponse{
+		Status:           "online",
+		TotalIngested:    atomic.LoadInt64(&totalIngestedCount),
+		CriticalAlerts:   atomic.LoadInt64(&alertCount),
+		QueueDepth:       len(dataChannel),
+		RawBits:          raw,
+		CompressedBits:   comp,
+		CompressionRatio: ratio,
+	}
+
 	w.Header().Set("Content-Type", "application/json")
-	w.Write([]byte(response))
+	json.NewEncoder(w).Encode(resp)
 }
 
 func main() {
