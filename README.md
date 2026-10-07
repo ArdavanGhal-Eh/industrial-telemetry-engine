@@ -3,6 +3,7 @@
 <!-- PROJECT SHIELDS -->
 <div align="center">
 
+[![Persian Documentation](https://img.shields.io/badge/مستندات-فارسی-green.svg?style=for-the-badge)](README_FA.md)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=for-the-badge)](https://opensource.org/licenses/MIT)
 [![Go Version](https://img.shields.io/badge/Go-1.22%2B-00ADD8.svg?style=for-the-badge&logo=go&logoColor=white)](https://golang.org/)
 [![Gorilla Compression](https://img.shields.io/badge/Compression-Gorilla_XOR-orange.svg?style=for-the-badge)](https://www.vldb.org/pvldb/vol8/p1816-teller.pdf)
