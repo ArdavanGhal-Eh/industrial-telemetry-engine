@@ -266,8 +266,8 @@ Distributed under the **MIT License**. See `LICENSE` for details.
 
 ## 👤 Author & Contact
 
-**Ardavan Ghal-Eh**  
-*Department of Mechanical Engineering, Sharif University of Technology*  
+**Ardavan Ghal-Eh**
+*Department of Mechanical Engineering, Sharif University of Technology*
 - **GitHub:** [@ArdavanGhal-Eh](https://github.com/ArdavanGhal-Eh)
 - **Profile:** [github.com/ArdavanGhal-Eh](https://github.com/ArdavanGhal-Eh)
 
@@ -426,8 +426,8 @@ go build -ldflags="-s -w" -o telemetry_engine main.go
 
 ## 👤 نویسنده
 
-**اردوان قلعه**  
-*دانشکده مهندسی مکانیک، دانشگاه صنعتی شریف*  
+**اردوان قلعه**
+*دانشکده مهندسی مکانیک، دانشگاه صنعتی شریف*
 - **گیت‌هاب:** [@ArdavanGhal-Eh](https://github.com/ArdavanGhal-Eh)
 
 <p align="right">(<a href="#readme-top">بازگشت به بالا ↑</a>)</p>
