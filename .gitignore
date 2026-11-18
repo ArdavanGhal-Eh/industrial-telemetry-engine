@@ -9,3 +9,10 @@ bin/
 *.log
 .idea/
 .vscode/
+
+# Nightly Hardened Hygiene Rules
+.env
+__pycache__/
+.pytest_cache/
+*.py[cod]
+*.key
